@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# app data
+.data/
+public/generated/
+
+# OMC 런타임 아티팩트
+.omc/
+!.omc/skills/

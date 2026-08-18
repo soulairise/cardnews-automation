@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 브랜드 카드뉴스 자동화 — Free 플랜 MVP
 
-## Getting Started
+PRD v0.3의 Free 체험 범위를 구현한 로컬 웹앱. 브랜드 등록 → 캐릭터 고정 → 카드뉴스 생성 → 텍스트 수정 → PNG 다운로드까지 동작한다. SNS 발행은 범위 밖(유료 플랜).
 
-First, run the development server:
+## 실행
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 설정 (둘 다 앱 `/settings` 화면에서 입력 가능)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 항목 | 없을 때 동작 | 발급처 |
+|---|---|---|
+| Gemini API 키 | 플레이스홀더 모드 — 흐름은 전부 동작, 이미지만 그라데이션 대체 | https://aistudio.google.com/apikey |
+| Google/네이버/카카오 OAuth | 해당 버튼이 "설정 필요"로 비활성 | 각 개발자 콘솔 |
 
-## Learn More
+Redirect URI는 `/settings` 화면에 그대로 복사할 수 있게 표시된다.
+`.env.local` 로 넣으려면 `.env.local.example` 참고 (파일 수정 후 서버 재시작 필요, 앱 화면 입력은 재시작 불필요).
 
-To learn more about Next.js, take a look at the following resources:
+## 사용 한도
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| | 캐릭터 시트 | 카드뉴스 | 발행 |
+|---|---|---|---|
+| 비로그인 | 1회 | 1건 | ✕ |
+| 로그인 (Free) | 1회 | 3건 | ✕ |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+한도를 넘기면 로그인 화면으로 유도된다. 비로그인 상태에서 만든 브랜드·캐릭터·카드뉴스는 **첫 로그인 때 계정으로 그대로 이관**된다.
 
-## Deploy on Vercel
+## 구조
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `lib/pipeline.ts` — 생성 파이프라인. 키가 없으면 `lib/placeholder.ts` 로 자동 폴백
+- `components/CardCanvas.tsx` — 하이브리드 렌더러. 배경·캐릭터는 생성 이미지, 텍스트는 DOM 레이어
+  - 미리보기와 내보내기가 같은 노드라 WYSIWYG가 구조적으로 보장된다
+  - 텍스트 수정 시 이미지를 재생성하지 않는다
+- `lib/qc.ts` — 자동 품질검사(글자수 초과, WCAG 명도 대비)
+- `lib/auth.ts` — Google/네이버/카카오 OAuth. 이 앱 전용 회원 저장소이며 다른 앱과 공유하지 않는다
+- `lib/store.ts` — `.data/state.json` 파일 저장. 사용자별 작업공간은 `${provider}:${id}` 키로 분리
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 모델
+
+| 용도 | 모델 | 이유 |
+|---|---|---|
+| 캐릭터 시트 | `gemini-3-pro-image` | 브랜드당 1회성이라 고급 모델 허용 |
+| 카드 배경 | `gemini-3.1-flash-image` | 매 건 발생하므로 표준 모델 |
+| 카피 생성 | `gemini-3.7-flash` | |
+
+## 데이터
+
+`.data/` 와 `public/generated/` 는 gitignore 대상. 초기화하려면 두 디렉터리를 지우면 된다.
