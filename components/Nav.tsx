@@ -1,9 +1,8 @@
 'use client';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import Logo from './Logo';
-import { User } from '@/lib/types';
+import { FREE_PLAN } from '@/lib/freeplan';
 
 const LINKS = [
   { href: '/', label: '홈' },
@@ -15,22 +14,8 @@ const LINKS = [
 
 export default function Nav() {
   const path = usePathname();
-  const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [plan, setPlan] = useState<string>('');
-
-  useEffect(() => {
-    fetch('/api/state')
-      .then((r) => r.json())
-      .then((s) => { setUser(s.user); setPlan(s.plan?.label ?? ''); });
-  }, [path]);
-
-  async function logout() {
-    await fetch('/api/auth/session', { method: 'DELETE' });
-    setUser(null);
-    router.refresh();
-    router.push('/');
-  }
+  const norm = (p: string) => (p !== '/' && p.endsWith('/') ? p.slice(0, -1) : p);
+  const here = norm(path);
 
   return (
     <header className="border-b border-[var(--line)] bg-white/80 backdrop-blur">
@@ -43,38 +28,15 @@ export default function Nav() {
             key={l.href}
             href={l.href}
             className={`rounded-lg px-3 py-1.5 text-sm transition ${
-              path === l.href ? 'bg-[var(--accent)] text-white font-semibold' : 'text-[var(--muted)] hover:bg-neutral-100'
+              here === l.href ? 'bg-[var(--accent)] text-white font-semibold' : 'text-[var(--muted)] hover:bg-neutral-100'
             }`}
           >
             {l.label}
           </Link>
         ))}
-
-        <div className="ml-auto flex items-center gap-2">
-          {plan && (
-            <span className="hidden rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-[var(--muted)] sm:inline">
-              {plan}
-            </span>
-          )}
-          {user ? (
-            <>
-              <span className="flex items-center gap-1.5 text-xs font-semibold">
-                {user.picture && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={user.picture} alt="" className="h-6 w-6 rounded-full object-cover" />
-                )}
-                {user.name}
-              </span>
-              <button onClick={logout} className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-neutral-100">
-                로그아웃
-              </button>
-            </>
-          ) : (
-            <Link href="/login" className="btn-primary !px-3 !py-1.5 !text-xs">
-              로그인
-            </Link>
-          )}
-        </div>
+        <span className="ml-auto rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-[var(--muted)]">
+          {FREE_PLAN.label}
+        </span>
       </nav>
     </header>
   );

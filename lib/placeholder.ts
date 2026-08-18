@@ -5,7 +5,8 @@
  */
 
 function svgUrl(svg: string) {
-  return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf-8').toString('base64')}`;
+  // html-to-image 는 utf8 data URL 인라인에 실패한다. SVG 는 ASCII 뿐이라 btoa 로 안전하다.
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
 export function placeholderCharacter(opts: {

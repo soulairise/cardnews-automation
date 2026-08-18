@@ -1,20 +1,6 @@
-import { isGuestKey } from './store';
-
-/**
- * PRD v0.3 10장 기준 + 로그인 게이트.
- * 비로그인은 맛보기 1건까지, 로그인하면 Free 플랜 한도로 열린다.
- */
-export const GUEST_PLAN = {
-  label: '무료 체험 (비로그인)',
-  maxCharacterSheets: 1,
-  maxDecks: 1,
-  cardsPerDeck: 5,
-  canPublish: false,
-  watermark: true,
-} as const;
-
+/** 로그인이 없는 정적 버전 — 모든 데이터가 이 브라우저에만 남는다. */
 export const FREE_PLAN = {
-  label: 'Free (로그인)',
+  label: '체험판',
   maxCharacterSheets: 1,
   maxDecks: 3,
   cardsPerDeck: 5,
@@ -22,16 +8,18 @@ export const FREE_PLAN = {
   watermark: true,
 } as const;
 
-export function planFor(workspaceKey: string) {
-  return isGuestKey(workspaceKey) ? GUEST_PLAN : FREE_PLAN;
-}
-
-export function planStatus(workspaceKey: string, sheetsUsed: number, deckCount: number) {
-  const plan = planFor(workspaceKey);
+export function planStatus(sheetsUsed: number, deckCount: number) {
   return {
-    label: plan.label,
-    isGuest: isGuestKey(workspaceKey),
-    sheets: { used: sheetsUsed, max: plan.maxCharacterSheets, left: Math.max(0, plan.maxCharacterSheets - sheetsUsed) },
-    decks: { used: deckCount, max: plan.maxDecks, left: Math.max(0, plan.maxDecks - deckCount) },
+    label: FREE_PLAN.label,
+    sheets: {
+      used: sheetsUsed,
+      max: FREE_PLAN.maxCharacterSheets,
+      left: Math.max(0, FREE_PLAN.maxCharacterSheets - sheetsUsed),
+    },
+    decks: {
+      used: deckCount,
+      max: FREE_PLAN.maxDecks,
+      left: Math.max(0, FREE_PLAN.maxDecks - deckCount),
+    },
   };
 }

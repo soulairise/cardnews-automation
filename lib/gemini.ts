@@ -1,10 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
 
 /**
- * Gemini 어댑터 (@google/genai v2, interactions API).
- * PRD 10장 원가표에 맞춰 용도별로 모델을 분리한다.
- *  - 캐릭터 시트: 브랜드당 1회성이므로 고급 모델 허용
- *  - 카드 배경:   매 건 발생하므로 저가~표준 모델
+ * 브라우저에서 직접 Gemini 를 호출한다.
+ * 키는 사용자의 브라우저에만 저장되며 어떤 서버로도 전송되지 않는다.
  */
 export const MODELS = {
   characterSheet: 'gemini-3-pro-image',
@@ -45,10 +43,11 @@ export async function genJSON<T>(apiKey: string, prompt: string): Promise<T> {
 
 export type ImageRef = { mimeType: string; base64: string };
 
+/** 생성 결과를 data URL 로 돌려준다. 서버 저장이 없으므로 이미지가 곧 데이터다. */
 export async function genImage(
   apiKey: string,
   opts: { prompt: string; model: string; refs?: ImageRef[] },
-): Promise<Buffer> {
+): Promise<string> {
   const input: unknown[] = [{ type: 'text', text: opts.prompt }];
   for (const ref of opts.refs ?? []) {
     input.push({ type: 'image', mime_type: ref.mimeType, data: ref.base64 });
@@ -61,9 +60,18 @@ export async function genImage(
     });
     const img = (res as { output_image?: { data?: string } }).output_image;
     if (!img?.data) throw new GeminiError('이미지 응답이 비어 있습니다.');
-    return Buffer.from(img.data, 'base64');
+    return `data:image/png;base64,${img.data}`;
   } catch (e) {
     if (e instanceof GeminiError) throw e;
     throw new GeminiError(`이미지 생성 실패: ${(e as Error).message}`);
   }
+}
+
+/** data URL 을 참조 이미지로 되돌린다. 캐릭터 일관성 유지의 핵심 경로. */
+export function refFromDataUrl(url: string): ImageRef | null {
+  const m = /^data:(image\/[a-z+]+);base64,(.+)$/.exec(url);
+  if (!m) return null;
+  // SVG 플레이스홀더는 참조로 쓰지 않는다
+  if (m[1] === 'image/svg+xml') return null;
+  return { mimeType: m[1], base64: m[2] };
 }

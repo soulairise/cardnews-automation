@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Brand } from '@/lib/types';
+import { loadWorkspace, updateWorkspace } from '@/lib/local';
 
 const PRESETS = [
   { name: '블루', primary: '#2F6BFF', secondary: '#7AA2FF' },
@@ -24,7 +25,7 @@ export default function BrandPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetch('/api/state').then((r) => r.json()).then((s) => { if (s.brand) setForm(s.brand); });
+    loadWorkspace().then((w) => { if (w.brand) setForm(w.brand); });
   }, []);
 
   function setColor(k: keyof Brand['colors'], v: string) {
@@ -39,15 +40,12 @@ export default function BrandPage() {
   }
 
   async function save() {
+    if (!form.name.trim()) return setMsg('브랜드명을 입력하세요.');
     setBusy(true);
-    const res = await fetch('/api/brand', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    const data = await res.json();
+    const brand: Brand = { ...form, name: form.name.trim(), createdAt: new Date().toISOString() };
+    // 브랜드를 바꾸면 기존 캐릭터 후보는 무효가 된다 (확정된 캐릭터는 유지)
+    await updateWorkspace((w) => ({ ...w, brand, candidates: [] }));
     setBusy(false);
-    if (!res.ok) return setMsg(data.error);
     router.push('/character');
   }
 

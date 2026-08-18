@@ -3,32 +3,36 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { toPng } from 'html-to-image';
 import CardCanvas, { CARD_H, CARD_W } from '@/components/CardCanvas';
-import { Brand, Card, Deck } from '@/lib/types';
+import { Brand, Card, Deck, Workspace } from '@/lib/types';
 import { checkDeck, LIMITS } from '@/lib/qc';
+import { getApiKey, loadWorkspace, updateWorkspace } from '@/lib/local';
+import { buildBackgrounds, buildCopy } from '@/lib/pipeline';
+import { FREE_PLAN, planStatus } from '@/lib/freeplan';
 
 const PREVIEW_W = 300;
 const SCALE = PREVIEW_W / CARD_W;
 
 export default function CreatePage() {
-  const [brand, setBrand] = useState<Brand | null>(null);
-  const [hasKey, setHasKey] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [ws, setWs] = useState<Workspace | null>(null);
   const [deck, setDeck] = useState<Deck | null>(null);
-  const [plan, setPlan] = useState<{ decks: { used: number; max: number; left: number } } | null>(null);
   const [topic, setTopic] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [needLogin, setNeedLogin] = useState(false);
-  const [saved, setSaved] = useState('');
+  const [note, setNote] = useState('');
   const nodes = useRef<(HTMLDivElement | null)[]>([]);
+  const hasKey = typeof window !== 'undefined' && !!getApiKey();
 
   useEffect(() => {
-    fetch('/api/state').then((r) => r.json()).then((s) => {
-      setBrand(s.brand);
-      setHasKey(s.hasKey);
-      setPlan(s.plan);
-      if (s.decks.length) setDeck(s.decks[s.decks.length - 1]);
+    loadWorkspace().then((w) => {
+      setWs(w);
+      if (w.decks.length) setDeck(w.decks[w.decks.length - 1]);
+      setReady(true);
     });
   }, []);
+
+  const brand: Brand | null = ws?.brand ?? null;
+  const plan = ws ? planStatus(ws.characterSheetsUsed, ws.decks.length) : null;
 
   const issues = useMemo(
     () => (deck && brand ? checkDeck(deck.cards, brand.colors.text, brand.colors.bg) : []),
@@ -36,48 +40,59 @@ export default function CreatePage() {
   );
 
   async function generate() {
+    if (!ws?.brand) return;
+    if (ws.decks.length >= FREE_PLAN.maxDecks) {
+      return setErr(`체험판에서는 카드뉴스를 ${FREE_PLAN.maxDecks}건까지 만들 수 있습니다. 설정에서 데이터를 지우면 다시 만들 수 있습니다.`);
+    }
     setBusy(true);
     setErr('');
-    const res = await fetch('/api/deck', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic }),
-    });
-    const data = await res.json();
-    setBusy(false);
-    if (!res.ok) {
-      setNeedLogin(!!data.needLogin);
-      return setErr(data.error);
+    setNote('');
+    try {
+      const key = getApiKey();
+      const copy = await buildCopy(ws.brand, key, topic.trim());
+      const cards: Card[] = copy.map((c, i) => ({
+        id: `c${i}`, role: c.role, title: c.title, body: c.body, backgroundUrl: null,
+      }));
+      const backgrounds = await buildBackgrounds(ws, key, cards);
+      cards.forEach((c, i) => (c.backgroundUrl = backgrounds[i]));
+
+      const next: Deck = { id: `d${Date.now()}`, topic: topic.trim(), cards, createdAt: new Date().toISOString() };
+      const saved = await updateWorkspace((w) => ({ ...w, decks: [...w.decks, next] }));
+      setWs(saved);
+      setDeck(next);
+    } catch (e) {
+      setErr((e as Error).message);
     }
-    setNeedLogin(false);
-    setDeck(data.deck);
-    const s = await fetch('/api/state').then((r) => r.json());
-    setPlan(s.plan);
+    setBusy(false);
   }
 
   function editCard(id: string, patch: Partial<Card>) {
     setDeck((d) => (d ? { ...d, cards: d.cards.map((c) => (c.id === id ? { ...c, ...patch } : c)) } : d));
-    setSaved('');
+    setNote('');
   }
 
   async function saveEdits() {
     if (!deck) return;
-    await fetch('/api/deck', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deckId: deck.id, cards: deck.cards }),
-    });
-    setSaved('수정 내용을 저장했습니다. 이미지는 다시 생성하지 않았습니다.');
+    const saved = await updateWorkspace((w) => ({
+      ...w,
+      decks: w.decks.map((d) => (d.id === deck.id ? deck : d)),
+    }));
+    setWs(saved);
+    setNote('수정 내용을 저장했습니다. 이미지는 다시 생성하지 않았습니다.');
   }
 
   async function download(i: number) {
     const node = nodes.current[i];
     if (!node) return;
-    const url = await toPng(node, { width: CARD_W, height: CARD_H, pixelRatio: 1, cacheBust: true });
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${brand?.name ?? 'card'}-${String(i + 1).padStart(2, '0')}.png`;
-    a.click();
+    try {
+      const url = await toPng(node, { width: CARD_W, height: CARD_H, pixelRatio: 1, cacheBust: true });
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${brand?.name ?? 'card'}-${String(i + 1).padStart(2, '0')}.png`;
+      a.click();
+    } catch (e) {
+      setErr(`이미지 내보내기에 실패했습니다: ${(e as Error).message}`);
+    }
   }
 
   async function downloadAll() {
@@ -87,6 +102,8 @@ export default function CreatePage() {
       await new Promise((r) => setTimeout(r, 350));
     }
   }
+
+  if (!ready) return <p className="text-sm text-[var(--muted)]">불러오는 중…</p>;
 
   if (!brand) {
     return (
@@ -112,30 +129,19 @@ export default function CreatePage() {
           placeholder="예: 9월 15일 저녁 7시, 요가명상학과 가을 특강을 엽니다. 참가비 무료, 선착순 30명. 초보자도 참여할 수 있습니다."
           value={topic} onChange={(e) => setTopic(e.target.value)} />
         <div className="flex flex-wrap items-center gap-3">
-          <button className="btn-primary" onClick={generate} disabled={busy || !topic.trim() || plan?.decks.left === 0}>
+          <button className="btn-primary" onClick={generate} disabled={busy || !topic.trim()}>
             {busy ? '만드는 중… (최대 1분)' : '카드뉴스 5장 만들기'}
           </button>
           {plan && (
             <span className="text-xs text-[var(--muted)]">
-              Free 체험 {plan.decks.used}/{plan.decks.max}건 사용 · 잔여 {plan.decks.left}건
+              {plan.decks.used}/{plan.decks.max}건 사용 · 잔여 {plan.decks.left}건
             </span>
           )}
           {!hasKey && (
-            <span className="text-xs text-amber-700">
-              키 없음 — 배경은 브랜드 컬러 그라데이션으로 대체됩니다
-            </span>
+            <span className="text-xs text-amber-700">키 없음 — 배경은 브랜드 컬러 그라데이션으로 대체됩니다</span>
           )}
         </div>
-        {err && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
-            <p className="text-amber-900">{err}</p>
-            {needLogin && (
-              <Link href="/login" className="btn-primary mt-3 inline-block">
-                로그인하고 계속 만들기 →
-              </Link>
-            )}
-          </div>
-        )}
+        {err && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{err}</p>}
       </section>
 
       {deck && (
@@ -167,11 +173,9 @@ export default function CreatePage() {
           <div className="flex flex-wrap gap-2">
             <button className="btn-primary" onClick={downloadAll}>전체 PNG 다운로드</button>
             <button className="btn-ghost" onClick={saveEdits}>수정 내용 저장</button>
-            <button className="btn-ghost" disabled title="Free 체험은 발행이 제외됩니다">
-              SNS 발행 (유료 플랜)
-            </button>
+            <button className="btn-ghost" disabled title="체험판은 발행이 제외됩니다">SNS 발행 (준비 중)</button>
           </div>
-          {saved && <p className="text-sm text-emerald-700">{saved}</p>}
+          {note && <p className="text-sm text-emerald-700">{note}</p>}
 
           <div className="space-y-6">
             {deck.cards.map((card, i) => (

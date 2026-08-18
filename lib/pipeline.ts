@@ -1,14 +1,14 @@
+'use client';
 import { Brand, Card, CharacterCandidate, Workspace } from './types';
-import { ImageRef, MODELS, genImage, genJSON } from './gemini';
+import { MODELS, genImage, genJSON, refFromDataUrl } from './gemini';
 import { placeholderBackground, placeholderCharacter } from './placeholder';
-import { loadImageBytes, saveImage } from './store';
-import { planFor } from './freeplan';
+import { FREE_PLAN } from './freeplan';
 import { LIMITS } from './qc';
 
 /** 하이브리드 렌더링의 전제: 생성 이미지에는 글자가 절대 들어가면 안 된다. */
 const NO_TEXT = 'Absolutely no text, no letters, no words, no numbers, no logos, no watermarks anywhere in the image.';
 
-/** PRD 6장 — 극단적 각도·조명 변화에서 일관성이 무너지므로 템플릿 단계에서 범위를 묶는다. */
+/** 극단적 각도·조명 변화에서 일관성이 무너지므로 템플릿 단계에서 범위를 묶는다. */
 const CONSISTENCY_LOCK =
   'Consistent soft even daylight studio lighting, front-facing three-quarter view, same art style, same character proportions and same outfit as the reference.';
 
@@ -54,14 +54,7 @@ function backgroundPrompt(brand: Brand, card: Card, hasCharacter: boolean) {
   ].join(' ');
 }
 
-async function refFrom(url: string): Promise<ImageRef | null> {
-  const bytes = await loadImageBytes(url);
-  return bytes ? { mimeType: 'image/png', base64: bytes.toString('base64') } : null;
-}
-
-export async function buildCandidates(ws: Workspace, key: string | null): Promise<CharacterCandidate[]> {
-  const brand = ws.brand!;
-
+export async function buildCandidates(brand: Brand, key: string | null): Promise<CharacterCandidate[]> {
   return Promise.all(
     STYLE_DIRECTIONS.map(async (dir, i) => {
       const description = `${brand.name} 캐릭터 — ${dir.hint}`;
@@ -69,55 +62,47 @@ export async function buildCandidates(ws: Workspace, key: string | null): Promis
         return {
           id: dir.key,
           description,
-          imageUrl: placeholderCharacter({ primary: brand.colors.primary, secondary: brand.colors.secondary, seed: i, label: dir.hint }),
+          imageUrl: placeholderCharacter({ primary: brand.colors.primary, secondary: brand.colors.secondary, seed: i }),
         };
       }
-      const buf = await genImage(key, { prompt: characterPrompt(brand, dir.en), model: MODELS.characterSheet });
-      return { id: dir.key, description, imageUrl: await saveImage(buf, `char-${dir.key}`) };
+      const imageUrl = await genImage(key, { prompt: characterPrompt(brand, dir.en), model: MODELS.characterSheet });
+      return { id: dir.key, description, imageUrl };
     }),
   );
 }
 
-export async function buildSheet(ws: Workspace, key: string | null, candidate: CharacterCandidate) {
-  const brand = ws.brand!;
-  const ref = await refFrom(candidate.imageUrl);
+export async function buildSheet(brand: Brand, key: string | null, candidate: CharacterCandidate) {
+  const ref = refFromDataUrl(candidate.imageUrl);
 
-  const sheet = await Promise.all(
+  return Promise.all(
     SHEET_VIEWS.map(async (view, i) => {
       if (!key || !ref) {
         return {
           label: view.label,
-          imageUrl: placeholderCharacter({ primary: brand.colors.primary, secondary: brand.colors.secondary, seed: i, label: view.label }),
+          imageUrl: placeholderCharacter({ primary: brand.colors.primary, secondary: brand.colors.secondary, seed: i }),
         };
       }
-      const buf = await genImage(key, {
+      const imageUrl = await genImage(key, {
         model: MODELS.characterSheet,
         prompt: `Redraw the exact same character from the reference image: ${view.en}. ${CONSISTENCY_LOCK} Plain flat background. ${NO_TEXT}`,
         refs: [ref],
       });
-      return { label: view.label, imageUrl: await saveImage(buf, `sheet-${i}`) };
+      return { label: view.label, imageUrl };
     }),
   );
-
-  return sheet;
 }
 
 type CopyOut = { role: Card['role']; title: string; body: string }[];
 
-export async function buildCopy(ws: Workspace, key: string | null, workspaceKey: string, topic: string): Promise<CopyOut> {
-  const brand = ws.brand!;
-  const n = planFor(workspaceKey).cardsPerDeck;
+export async function buildCopy(brand: Brand, key: string | null, topic: string): Promise<CopyOut> {
+  const n = FREE_PLAN.cardsPerDeck;
 
   if (!key) {
-    // 키 없이도 흐름이 끊기지 않도록 하는 결정적 폴백 (실제 카피 품질은 키 연결 후)
+    // 키 없이도 흐름이 끊기지 않도록 하는 결정적 폴백
     const sentences = topic.split(/[.\n·]/).map((s) => s.trim()).filter(Boolean);
     const out: CopyOut = [{ role: 'cover', title: (sentences[0] || topic).slice(0, LIMITS.coverTitle), body: brand.name }];
     for (let i = 1; i < n - 1; i++) {
-      out.push({
-        role: 'body',
-        title: `포인트 ${i}`,
-        body: (sentences[i] || topic).slice(0, LIMITS.body),
-      });
+      out.push({ role: 'body', title: `포인트 ${i}`, body: (sentences[i] || topic).slice(0, LIMITS.body) });
     }
     out.push({ role: 'cta', title: '자세히 보기', body: `${brand.name} 계정에서 확인하세요` });
     return out;
@@ -147,25 +132,24 @@ JSON 배열만 출력해라. 형식: [{"role":"cover","title":"...","body":"..."
   }));
 }
 
-export async function buildBackgrounds(ws: Workspace, key: string | null, cards: Card[]): Promise<(string | null)[]> {
+export async function buildBackgrounds(ws: Workspace, key: string | null, cards: Card[]): Promise<string[]> {
   const brand = ws.brand!;
-  const charRef = ws.character ? await refFrom(ws.character.mainImageUrl) : null;
+  const charRef = ws.character ? refFromDataUrl(ws.character.mainImageUrl) : null;
 
   return Promise.all(
     cards.map(async (card, i) => {
-      if (!key) {
-        return placeholderBackground({ primary: brand.colors.primary, secondary: brand.colors.secondary, seed: i });
-      }
+      const fallback = () =>
+        placeholderBackground({ primary: brand.colors.primary, secondary: brand.colors.secondary, seed: i });
+      if (!key) return fallback();
       try {
-        const buf = await genImage(key, {
+        return await genImage(key, {
           model: MODELS.cardBackground,
           prompt: backgroundPrompt(brand, card, !!charRef),
           refs: charRef ? [charRef] : undefined,
         });
-        return await saveImage(buf, `bg-${i}`);
       } catch {
-        // 한 장이 실패해도 덱 전체를 버리지 않는다 (PRD F11 재시도의 전신)
-        return placeholderBackground({ primary: brand.colors.primary, secondary: brand.colors.secondary, seed: i });
+        // 한 장이 실패해도 덱 전체를 버리지 않는다
+        return fallback();
       }
     }),
   );
