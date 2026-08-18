@@ -1,0 +1,3 @@
+:HL["/cardnews-automation/_next/static/chunks/1s597qarslaxj.css","style"]
+:HL["/cardnews-automation/_next/static/media/PretendardVariable-s.p.0ztvx5mb7lxp4.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+0:{"tree":{"name":"","param":null,"prefetchHints":4176,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":4256,"slots":null}}},"staleTime":300,"buildId":"wXyrk3HBYQoJc58_DPRVX"}
