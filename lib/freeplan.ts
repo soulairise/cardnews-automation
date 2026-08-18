@@ -1,4 +1,4 @@
-import { GUEST_KEY } from './types';
+import { isGuestKey } from './store';
 
 /**
  * PRD v0.3 10장 기준 + 로그인 게이트.
@@ -23,14 +23,14 @@ export const FREE_PLAN = {
 } as const;
 
 export function planFor(workspaceKey: string) {
-  return workspaceKey === GUEST_KEY ? GUEST_PLAN : FREE_PLAN;
+  return isGuestKey(workspaceKey) ? GUEST_PLAN : FREE_PLAN;
 }
 
 export function planStatus(workspaceKey: string, sheetsUsed: number, deckCount: number) {
   const plan = planFor(workspaceKey);
   return {
     label: plan.label,
-    isGuest: workspaceKey === GUEST_KEY,
+    isGuest: isGuestKey(workspaceKey),
     sheets: { used: sheetsUsed, max: plan.maxCharacterSheets, left: Math.max(0, plan.maxCharacterSheets - sheetsUsed) },
     decks: { used: deckCount, max: plan.maxDecks, left: Math.max(0, plan.maxDecks - deckCount) },
   };

@@ -49,18 +49,6 @@ export type Workspace = {
   decks: Deck[];
 };
 
-export const GUEST_KEY = 'guest';
-
 export type OAuthCreds = { clientId: string; clientSecret: string };
 
-export type AppState = {
-  apiKey?: string;
-  oauth: Partial<Record<Provider, OAuthCreds>>;
-  users: Record<string, User>;
-  /** sessionId → workspace key */
-  sessions: Record<string, { key: string; createdAt: string }>;
-  workspaces: Record<string, Workspace>;
-};
-
 export const EMPTY_WORKSPACE: Workspace = { characterSheetsUsed: 0, decks: [] };
-export const EMPTY_STATE: AppState = { oauth: {}, users: {}, sessions: {}, workspaces: {} };

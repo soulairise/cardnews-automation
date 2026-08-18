@@ -1,26 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentKey, getWorkspace, mutateWorkspace, readState, resolveKey } from '@/lib/store';
+import { currentKey, getWorkspace, isGuestKey, resolveGeminiKey, updateWorkspace } from '@/lib/store';
 import { buildCandidates, buildSheet } from '@/lib/pipeline';
 import { planFor } from '@/lib/freeplan';
-import { GUEST_KEY } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
   const { action, candidateId } = await req.json();
-  const state = readState();
   const key = await currentKey();
-  const ws = getWorkspace(state, key);
+  const [ws, gem] = await Promise.all([getWorkspace(key), resolveGeminiKey()]);
   const plan = planFor(key);
-  const gem = resolveKey(state);
 
   if (!ws.brand) return NextResponse.json({ error: '브랜드를 먼저 등록하세요.' }, { status: 400 });
 
   try {
     if (action === 'candidates') {
       const candidates = await buildCandidates(ws, gem);
-      mutateWorkspace(key, (w) => ({ ...w, candidates }));
+      await updateWorkspace(key, (w) => ({ ...w, candidates }));
       return NextResponse.json({ ok: true, candidates });
     }
 
@@ -29,7 +26,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             error: `${plan.label}에서는 캐릭터 시트를 ${plan.maxCharacterSheets}회만 만들 수 있습니다.`,
-            needLogin: key === GUEST_KEY,
+            needLogin: isGuestKey(key),
           },
           { status: 402 },
         );
@@ -45,7 +42,7 @@ export async function POST(req: NextRequest) {
         sheet,
         lockedAt: new Date().toISOString(),
       };
-      mutateWorkspace(key, (w) => ({ ...w, character, characterSheetsUsed: w.characterSheetsUsed + 1 }));
+      await updateWorkspace(key, (w) => ({ ...w, character, characterSheetsUsed: w.characterSheetsUsed + 1 }));
       return NextResponse.json({ ok: true, character });
     }
 

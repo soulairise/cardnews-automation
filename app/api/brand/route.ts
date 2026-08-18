@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentKey, mutateWorkspace } from '@/lib/store';
+import { currentKey, updateWorkspace } from '@/lib/store';
 import { Brand } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -24,6 +24,6 @@ export async function POST(req: NextRequest) {
   };
   const key = await currentKey();
   // 브랜드를 바꾸면 기존 캐릭터 후보는 무효가 된다 (확정된 캐릭터는 유지)
-  mutateWorkspace(key, (w) => ({ ...w, brand, candidates: [] }));
+  await updateWorkspace(key, (w) => ({ ...w, brand, candidates: [] }));
   return NextResponse.json({ ok: true, brand });
 }

@@ -1,9 +1,7 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { Brand, Card, CharacterCandidate, Workspace } from './types';
-import { MODELS, genImage, genJSON, fileToRef } from './gemini';
+import { ImageRef, MODELS, genImage, genJSON } from './gemini';
 import { placeholderBackground, placeholderCharacter } from './placeholder';
-import { saveImage } from './store';
+import { loadImageBytes, saveImage } from './store';
 import { planFor } from './freeplan';
 import { LIMITS } from './qc';
 
@@ -56,11 +54,9 @@ function backgroundPrompt(brand: Brand, card: Card, hasCharacter: boolean) {
   ].join(' ');
 }
 
-function refFromWebPath(webPath: string) {
-  if (!webPath.startsWith('/generated/')) return null; // 플레이스홀더(data URL)는 참조로 못 쓴다
-  const abs = path.join(process.cwd(), 'public', webPath);
-  if (!fs.existsSync(abs)) return null;
-  return fileToRef(abs, fs);
+async function refFrom(url: string): Promise<ImageRef | null> {
+  const bytes = await loadImageBytes(url);
+  return bytes ? { mimeType: 'image/png', base64: bytes.toString('base64') } : null;
 }
 
 export async function buildCandidates(ws: Workspace, key: string | null): Promise<CharacterCandidate[]> {
@@ -77,14 +73,14 @@ export async function buildCandidates(ws: Workspace, key: string | null): Promis
         };
       }
       const buf = await genImage(key, { prompt: characterPrompt(brand, dir.en), model: MODELS.characterSheet });
-      return { id: dir.key, description, imageUrl: saveImage(buf, `char-${dir.key}`) };
+      return { id: dir.key, description, imageUrl: await saveImage(buf, `char-${dir.key}`) };
     }),
   );
 }
 
 export async function buildSheet(ws: Workspace, key: string | null, candidate: CharacterCandidate) {
   const brand = ws.brand!;
-  const ref = refFromWebPath(candidate.imageUrl);
+  const ref = await refFrom(candidate.imageUrl);
 
   const sheet = await Promise.all(
     SHEET_VIEWS.map(async (view, i) => {
@@ -99,7 +95,7 @@ export async function buildSheet(ws: Workspace, key: string | null, candidate: C
         prompt: `Redraw the exact same character from the reference image: ${view.en}. ${CONSISTENCY_LOCK} Plain flat background. ${NO_TEXT}`,
         refs: [ref],
       });
-      return { label: view.label, imageUrl: saveImage(buf, `sheet-${i}`) };
+      return { label: view.label, imageUrl: await saveImage(buf, `sheet-${i}`) };
     }),
   );
 
@@ -153,7 +149,7 @@ JSON 배열만 출력해라. 형식: [{"role":"cover","title":"...","body":"..."
 
 export async function buildBackgrounds(ws: Workspace, key: string | null, cards: Card[]): Promise<(string | null)[]> {
   const brand = ws.brand!;
-  const charRef = ws.character ? refFromWebPath(ws.character.mainImageUrl) : null;
+  const charRef = ws.character ? await refFrom(ws.character.mainImageUrl) : null;
 
   return Promise.all(
     cards.map(async (card, i) => {
@@ -166,7 +162,7 @@ export async function buildBackgrounds(ws: Workspace, key: string | null, cards:
           prompt: backgroundPrompt(brand, card, !!charRef),
           refs: charRef ? [charRef] : undefined,
         });
-        return saveImage(buf, `bg-${i}`);
+        return await saveImage(buf, `bg-${i}`);
       } catch {
         // 한 장이 실패해도 덱 전체를 버리지 않는다 (PRD F11 재시도의 전신)
         return placeholderBackground({ primary: brand.colors.primary, secondary: brand.colors.secondary, seed: i });

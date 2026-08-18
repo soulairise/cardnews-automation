@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { creds, exchangeAndFetchUser, isProvider } from '@/lib/auth';
-import { SESSION_COOKIE, mutate, newSessionId, readState } from '@/lib/store';
-import { EMPTY_WORKSPACE, GUEST_KEY } from '@/lib/types';
+import { exchangeAndFetchUser, isProvider } from '@/lib/auth';
+import {
+  GUEST_COOKIE, SESSION_COOKIE, createSession, deleteWorkspace,
+  getUser, getWorkspace, newId, providerCreds, setWorkspace, upsertUser,
+} from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +21,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ provider: s
     return NextResponse.redirect(new URL('/login?error=state_mismatch', req.url));
   }
 
-  const c = creds(readState(), provider);
+  const c = await providerCreds(provider);
   if (!c) return NextResponse.redirect(new URL(`/login?error=not_configured&provider=${provider}`, req.url));
 
   let user;
@@ -30,29 +32,28 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ provider: s
     return NextResponse.redirect(new URL(`/login?error=exchange_failed&detail=${msg}`, req.url));
   }
 
-  const sid = newSessionId();
-  mutate((s) => {
-    const isNew = !s.workspaces[user.key];
-    const guest = s.workspaces[GUEST_KEY];
-    // 비로그인 상태에서 만들던 작업은 첫 로그인 때 그대로 넘겨준다
-    const carried = isNew && guest ? guest : (s.workspaces[user.key] ?? structuredClone(EMPTY_WORKSPACE));
-    const workspaces = { ...s.workspaces, [user.key]: carried };
-    if (isNew && guest) delete workspaces[GUEST_KEY];
+  const existing = await getUser(user.key);
+  await upsertUser(user);
 
-    return {
-      ...s,
-      users: { ...s.users, [user.key]: { ...(s.users[user.key] ?? user), ...user, joinedAt: s.users[user.key]?.joinedAt ?? user.joinedAt } },
-      sessions: { ...s.sessions, [sid]: { key: user.key, createdAt: new Date().toISOString() } },
-      workspaces,
-    };
-  });
+  // 비로그인 상태에서 만들던 작업은 첫 로그인 때 계정으로 그대로 넘겨준다
+  if (!existing) {
+    const guestId = req.cookies.get(GUEST_COOKIE)?.value;
+    if (guestId) {
+      const guestKey = `guest:${guestId}`;
+      const guestWs = await getWorkspace(guestKey);
+      if (guestWs.brand || guestWs.decks.length) {
+        await setWorkspace(user.key, guestWs);
+        await deleteWorkspace(guestKey);
+      }
+    }
+  }
+
+  const sid = newId();
+  await createSession(sid, user.key);
 
   const res = NextResponse.redirect(new URL('/', req.url));
   res.cookies.set(SESSION_COOKIE, sid, {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30,
+    httpOnly: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30,
   });
   res.cookies.delete(`oauth_state_${provider}`);
   return res;

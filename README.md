@@ -47,6 +47,31 @@ Redirect URI는 `/settings` 화면에 그대로 복사할 수 있게 표시된�
 | 카드 배경 | `gemini-3.1-flash-image` | 매 건 발생하므로 표준 모델 |
 | 카피 생성 | `gemini-3.7-flash` | |
 
-## 데이터
+## 데이터 · 배포
 
-`.data/` 와 `public/generated/` 는 gitignore 대상. 초기화하려면 두 디렉터리를 지우면 된다.
+저장소는 환경변수로 자동 전환된다.
+
+| 환경 | 저장 위치 |
+|---|---|
+| 로컬 (기본) | `.data/state.json` + `public/generated/` |
+| `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` 설정 시 | Supabase Postgres + Storage |
+
+**배포는 Supabase 설정이 필수다.** Vercel 같은 서버리스는 요청이 끝나면 파일이 사라져 파일 저장이 유지되지 않는다.
+
+### 배포 순서
+
+1. Supabase 프로젝트 생성 (리전: Northeast Asia — Seoul)
+2. SQL Editor 에 `supabase-schema.sql` 붙여넣고 실행
+3. Vercel 에 이 저장소를 연결하고 환경변수 등록
+   - `SUPABASE_URL` — 프로젝트 URL
+   - `SUPABASE_SERVICE_ROLE_KEY` — service_role 키 (**공개 금지**, 서버에서만 쓴다)
+   - `GEMINI_API_KEY` — 선택. 없으면 플레이스홀더 모드
+4. 배포 후 각 소셜 제공자에 Redirect URI 등록
+   - `https://<배포도메인>/api/auth/google/callback`
+   - `https://<배포도메인>/api/auth/naver/callback`
+   - `https://<배포도메인>/api/auth/kakao/callback`
+
+소셜 로그인은 Supabase Auth 를 쓰지 않는다. 이 앱이 직접 OAuth 를 처리하고 회원을
+`app_users` 에 저장하므로, 다른 서비스의 회원과 섞이지 않는다.
+
+`.data/`, `public/generated/`, `.env*` 는 gitignore 대상.

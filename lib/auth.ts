@@ -1,4 +1,4 @@
-import { AppState, Provider, User } from './types';
+import { Provider, User } from './types';
 
 type ProviderSpec = {
   label: string;
@@ -69,18 +69,6 @@ export function isProvider(v: string): v is Provider {
 
 export function redirectUri(origin: string, provider: Provider) {
   return `${origin}/api/auth/${provider}/callback`;
-}
-
-export function creds(state: AppState, provider: Provider) {
-  const fromEnv = {
-    clientId: process.env[`${provider.toUpperCase()}_CLIENT_ID`],
-    clientSecret: process.env[`${provider.toUpperCase()}_CLIENT_SECRET`],
-  };
-  if (fromEnv.clientId && fromEnv.clientSecret) {
-    return { clientId: fromEnv.clientId, clientSecret: fromEnv.clientSecret };
-  }
-  const saved = state.oauth[provider];
-  return saved?.clientId && saved?.clientSecret ? saved : null;
 }
 
 export function buildAuthUrl(provider: Provider, clientId: string, origin: string, state: string) {

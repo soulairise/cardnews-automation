@@ -67,8 +67,3 @@ export async function genImage(
     throw new GeminiError(`이미지 생성 실패: ${(e as Error).message}`);
   }
 }
-
-/** 저장된 생성 이미지를 참조 이미지로 다시 넣기 위한 로더 */
-export function fileToRef(absPath: string, fs: typeof import('node:fs')): ImageRef {
-  return { mimeType: 'image/png', base64: fs.readFileSync(absPath).toString('base64') };
-}
