@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { clearApiKey, getApiKey, maskKey, resetWorkspace, setApiKey } from '@/lib/local';
+import { clearApiKey, exportWorkspace, getApiKey, importWorkspace, maskKey, resetWorkspace, setApiKey } from '@/lib/local';
 
 export default function SettingsPage() {
   const [key, setKey] = useState('');
@@ -20,6 +20,26 @@ export default function SettingsPage() {
     clearApiKey();
     setSaved(null);
     setMsg('키를 삭제했습니다.');
+  }
+
+  async function exportFile() {
+    const json = await exportWorkspace();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    a.download = `카드뉴스-백업-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setMsg('백업 파일을 내려받았습니다.');
+  }
+
+  async function importFile(file: File | undefined) {
+    if (!file) return;
+    try {
+      const ws = await importWorkspace(await file.text());
+      setMsg(`불러왔습니다 — 브랜드 ${ws.brand?.name ?? '없음'}, 카드뉴스 ${ws.decks.length}건. 홈에서 확인하세요.`);
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
   }
 
   async function wipe() {
@@ -84,7 +104,15 @@ export default function SettingsPage() {
           브랜드·캐릭터·카드뉴스는 이 브라우저(IndexedDB)에만 저장됩니다. 다른 기기에서는 보이지 않고,
           브라우저 데이터를 지우면 함께 사라집니다.
         </p>
-        <button className="btn-ghost" onClick={wipe}>전부 지우고 처음부터</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button className="btn-ghost" onClick={exportFile}>백업 파일 내보내기</button>
+          <label className="btn-ghost cursor-pointer">
+            백업 파일 가져오기
+            <input type="file" accept="application/json,.json" className="hidden"
+              onChange={(e) => importFile(e.target.files?.[0])} />
+          </label>
+          <button className="btn-ghost" onClick={wipe}>전부 지우고 처음부터</button>
+        </div>
       </section>
     </div>
   );

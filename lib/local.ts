@@ -81,3 +81,32 @@ export function clearApiKey() {
 export function maskKey(key: string) {
   return `${key.slice(0, 4)}${'*'.repeat(Math.max(0, key.length - 8))}${key.slice(-4)}`;
 }
+
+/**
+ * 내보내기 · 가져오기
+ * 저장이 이 브라우저에만 있으므로, 기기를 옮기거나 백업하려면 이 경로가 유일하다.
+ */
+export async function exportWorkspace(): Promise<string> {
+  return JSON.stringify(await loadWorkspace(), null, 2);
+}
+
+export async function importWorkspace(json: string): Promise<Workspace> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error('파일을 읽지 못했습니다. 내보내기로 만든 JSON 파일이 맞는지 확인하세요.');
+  }
+  const w = parsed as Partial<Workspace>;
+  if (!w || typeof w !== 'object' || !Array.isArray(w.decks)) {
+    throw new Error('카드뉴스 백업 파일이 아닙니다.');
+  }
+  const next: Workspace = {
+    brand: w.brand,
+    character: w.character,
+    candidates: w.candidates ?? [],
+    characterSheetsUsed: w.characterSheetsUsed ?? 0,
+    decks: w.decks,
+  };
+  return saveWorkspace(next);
+}

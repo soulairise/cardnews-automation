@@ -1,15 +1,5 @@
 @import "tailwindcss";
 
-/* 로컬 동일 출처 폰트 — html-to-image 로 PNG를 뽑을 때 CORS 없이 임베드된다.
-   Pretendard, SIL Open Font License 1.1 (상업적 사용 가능) */
-@font-face {
-  font-family: 'Pretendard';
-  src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
-  font-weight: 45 920;
-  font-style: normal;
-  font-display: block;
-}
-
 :root {
   --background: #f7f7f8;
   --surface: #ffffff;
@@ -26,13 +16,13 @@
   --color-muted: var(--muted);
   --color-line: var(--line);
   --color-accent: var(--accent);
-  --font-sans: 'Pretendard', system-ui, sans-serif;
+  --font-sans: var(--font-pretendard), system-ui, sans-serif;
 }
 
 html, body {
   background: var(--background);
   color: var(--foreground);
-  font-family: 'Pretendard', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-pretendard), system-ui, -apple-system, sans-serif;
   word-break: keep-all;
 }
 

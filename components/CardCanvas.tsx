@@ -29,7 +29,7 @@ const CardCanvas = forwardRef<HTMLDivElement, Props>(function CardCanvas(
         position: 'relative',
         overflow: 'hidden',
         background: colors.bg,
-        fontFamily: 'Pretendard, system-ui, sans-serif',
+        fontFamily: 'var(--font-pretendard), system-ui, sans-serif',
       }}
     >
       {card.backgroundUrl ? (
